@@ -5,7 +5,7 @@
 bl_info = {
     "name": "Nanomaterials generator",
     "author": "nikita.gordeev@skoltech.ru",
-    "version": (1, 0),
+    "version": (1, 1),
     "blender": (2, 80, 0),
     "location": "View3D > UI > Nanomaterials generator",
     "description": "Create a set of Nanomaterials for further use in your papers",
@@ -15,7 +15,35 @@ bl_info = {
 import bpy
 import bmesh
 from bpy.types import Panel, Operator, PropertyGroup
-from bpy.props import IntProperty,FloatProperty, PointerProperty
+from bpy.props import IntProperty,FloatProperty, PointerProperty, FloatVectorProperty
+
+
+class MaterialProperties(PropertyGroup):
+    
+    color: FloatVectorProperty(
+        name = "color",
+        subtype = 'COLOR',
+        default = (0.0,0.0,0.1,1.0),
+        size = 4,
+        min = 0.0,
+        max = 1.0
+    )
+
+    roughness: FloatProperty(
+        name = "Roughness",
+        description= "Material rough",
+        default = 0.5,
+        min = 0.0,
+        max = 1.0
+    )
+
+    metallic: FloatProperty(
+        name = "Metallic",
+        description= "Material metal",
+        default = 0.5,
+        min = 0.0,
+        max = 1.0
+    )
 
 class MyProperties(PropertyGroup):
 
@@ -92,17 +120,34 @@ class MyProperties(PropertyGroup):
 
     Carbon_sphere: FloatProperty(
         name = 'Carbon spheres size',
-        default = 2,
-        min = 0.5,
-        max = 32        
+        default = 1.6,
+        min = 0.1,
+        max = 32,        
     )
 
     Carbon_wires: FloatProperty(
         name = 'Carbon wires size',
-        default = 2,
-        min = 0.5,
-        max = 32        
+        default = 0.75,
+        min = 0.1,
+        max = 32,        
     )
+
+def create_bsdf_material(name,color,roughness,metallic):
+    
+    mat = bpy.data.materials.new(name = name)
+    mat.use_nodes = True
+    mat.node_tree.nodes.clear()
+    bsdf = mat.node_tree.nodes.new(type = 'ShaderNodeBsdfPrincipled')
+    bsdf.location = (0,0)
+    bsdf.inputs['Base Color'].default_value = color
+    bsdf.inputs['Roughness'].default_value = roughness
+    bsdf.inputs['Metallic'].default_value = metallic
+
+    output = mat.node_tree.nodes.new(type = 'ShaderNodeOutputMaterial')
+    output.location = (400,0)
+    mat.node_tree.links.new(bsdf.outputs['BSDF'],output.inputs['Surface'])
+
+    return mat    
 
 class OBJECT_OT_my_addon(Operator):
     bl_idname = "object.my_addon"
@@ -112,8 +157,15 @@ class OBJECT_OT_my_addon(Operator):
     def execute(self, context):
         scene = context.scene
         mytool = scene.my_tool
+        material_tool = scene.material_tool
 
-        
+        film_mat = create_bsdf_material(
+            "CNT_Film_Material",
+            material_tool.color,
+            material_tool.roughness,
+            material_tool.metallic,
+        )
+
         # Создаем основу для баунса
         bpy.ops.mesh.primitive_cube_add(
             size=1,
@@ -161,7 +213,11 @@ class OBJECT_OT_my_addon(Operator):
         bounce_spline.select_set(True)
         bpy.ops.object.convert(target='MESH')
         
-        
+        if bounce_spline.data.materials:
+            bounce_spline.data.materials[0] = film_mat
+
+        else:
+            bounce_spline.data.materials.append(film_mat)
         
        
         
@@ -175,7 +231,7 @@ class OBJECT_OT_create_cnt(Operator):
 
     
 
-    def create_geometry_nodes_setup(self,obj):
+    def create_geometry_nodes_setup(self,obj,material_tool):
     
         
         node_group = bpy.data.node_groups.new('CNT_Geometry_Nodes','GeometryNodeTree')
@@ -236,9 +292,26 @@ class OBJECT_OT_create_cnt(Operator):
         join_geometry_node = node_group.nodes.new('GeometryNodeJoinGeometry')
         join_geometry_node.location = (800,0)
 
+        wire_mat = create_bsdf_material(
+            'CNT_wire_Material',
+            material_tool.color,
+            material_tool.roughness,
+            material_tool.metallic
+        )
+        
+        sphere_mat = create_bsdf_material(
+            'CNT_Sphere_Material',
+            material_tool.color,
+            material_tool.roughness,
+            material_tool.metallic
+        )
 
-        material_1 = bpy.data.materials.new(name = 'CNT_wire_Material')
-        material_2 = bpy.data.materials.new(name = 'CNT_Sphere_Material')
+        # Set material inputs
+        set_material_1_node.inputs['Material'].default_value = wire_mat
+        set_material_2_node.inputs['Material'].default_value = sphere_mat
+
+
+
 
         #node_group.input.new('NodeSocketMaterial', 'Material_1')
         #node_group.input['Material_1'].default_value = material_1
@@ -287,6 +360,8 @@ class OBJECT_OT_create_cnt(Operator):
     def execute(self, context):
         scene = context.scene
         mytool = scene.my_tool
+        material_tool = scene.material_tool
+
         global a, b
         a = mytool.Carbon_sphere
         b = mytool.Carbon_wires
@@ -327,10 +402,45 @@ class OBJECT_OT_create_cnt(Operator):
         deform_modifier.angle = deform_angle
         
         geo_modifier = cnt_obj.modifiers.new(name = "CNT_Geometry", type = 'NODES')
-        node_group = self.create_geometry_nodes_setup(cnt_obj)
+        node_group = self.create_geometry_nodes_setup(cnt_obj,material_tool)
         geo_modifier.node_group = node_group
         
+        try:
 
+            bpy.ops.object.modifier_add_node_group(
+             asset_library_type='ESSENTIALS',
+            asset_library_identifier="",
+             relative_asset_identifier="geometry_nodes\\smooth_by_angle.blend\\NodeTree\\Smooth by Angle"
+            )
+    
+
+            smooth_modifier = cnt_obj.modifiers.get("Smooth by Angle")
+    
+            if smooth_modifier:
+
+                smooth_modifier["Input_1"] = 1  
+
+                #smooth_modifier['Socket_1'] = 1
+                smooth_modifier['Socket_1'] = True  
+
+            else:
+                self.report({'WARNING'}, "Smooth by Angle modifier was not added successfully")
+        
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to add Smooth by Angle modifier: {str(e)}")
+
+        smooth_mod = cnt_obj.modifiers.get("Smooth by Angle")
+        if smooth_mod:
+            # Принудительное обновление модификатора путем изменения его позиции
+            # 1. Перемещаем модификатор в самое начало стека
+            while cnt_obj.modifiers.find(smooth_mod.name) > 0:
+                bpy.ops.object.modifier_move_to_index(modifier=smooth_mod.name, index=0)
+            # 2. Перемещаем модификатор в самый конец стека (после всех остальных модификаторов)
+            bpy.ops.object.modifier_move_to_index(modifier=smooth_mod.name, index=len(cnt_obj.modifiers)-1)
+
+
+        self.refresh = True
+        
         return {'FINISHED'}
 
 
@@ -346,6 +456,13 @@ class VIEW3D_PT_my_panel(Panel):
         layout = self.layout
         scene = context.scene
         mytool = scene.my_tool
+        material_tool = scene.material_tool
+
+        box = layout.box()
+        box.label(text="Material Settings")
+        box.prop(material_tool, "color")
+        box.prop(material_tool, "roughness")
+        box.prop(material_tool, "metallic")
 
 
         box = layout.box()
@@ -371,6 +488,7 @@ class VIEW3D_PT_my_panel(Panel):
 
 
 classes = (
+    MaterialProperties,
     MyProperties,
     OBJECT_OT_my_addon,
     OBJECT_OT_create_cnt,
@@ -381,11 +499,12 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.my_tool = PointerProperty(type=MyProperties)
+    bpy.types.Scene.material_tool = PointerProperty(type=MaterialProperties)
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.my_tool
-
+    del bpy.types.Scene.material_tool
 if __name__ == "__main__":
     register()
