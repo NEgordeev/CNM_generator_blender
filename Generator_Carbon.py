@@ -5,7 +5,7 @@
 bl_info = {
     "name": "Nanomaterials generator",
     "author": "nikita.gordeev@skoltech.ru",
-    "version": (1, 1),
+    "version": (0, 2),
     "blender": (2, 80, 0),
     "location": "View3D > UI > Nanomaterials generator",
     "description": "Create a set of Nanomaterials for further use in your papers",
@@ -131,6 +131,45 @@ class MyProperties(PropertyGroup):
         min = 0.1,
         max = 32,        
     )
+
+
+#-----------------------------------------------------------------
+#Graphene params
+    graphene_width: FloatProperty(
+        name = 'Graphene_sheet_width',
+        description= 'Graphene_sheet_width',
+        default = 1.0,
+        min = 0.01,
+        max = 10
+    )
+
+    Carbon_num_gr: IntProperty(
+        name = 'Carbon atoms',
+        description = 'Amount of carbon atoms on edge',
+        default = 8,
+        min = 4,
+        max = 32
+    )
+
+    Carbon_sphere_gr: FloatProperty(
+        name = 'Carbon spheres size',
+        default = 3.0,
+        min = 0.1,
+        max = 32,        
+    )
+
+    Carbon_wires_gr: FloatProperty(
+        name = 'Carbon wires size',
+        default = 1.0,
+        min = 0.1,
+        max = 32,        
+    )
+
+#-----------------------------------------------------------------
+
+
+
+
 
 def create_bsdf_material(name,color,roughness,metallic):
     
@@ -443,6 +482,207 @@ class OBJECT_OT_create_cnt(Operator):
         
         return {'FINISHED'}
 
+class OBJECT_OT_create_graphene(Operator):
+    bl_idname = "object.create_graphene"
+    bl_label = "Create graphene"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    
+
+    def create_geometry_nodes_setup1(self,obj,material_tool):
+    
+        
+        node_group = bpy.data.node_groups.new('Graphene_Geometry_Nodes','GeometryNodeTree')
+
+        input_geometry = node_group.interface.new_socket(
+                name="Geometry",
+                in_out='INPUT',
+                socket_type='NodeSocketGeometry'
+            )
+        output_geometry = node_group.interface.new_socket(
+            name="Geometry",
+            in_out='OUTPUT',
+            socket_type='NodeSocketGeometry'
+        )
+
+
+        group_input = node_group.nodes.new('NodeGroupInput')
+        group_input.location = (-800, 0)
+        
+        group_output = node_group.nodes.new('NodeGroupOutput') 
+        group_output.location = (1200, 0)
+
+        triangulate_node = node_group.nodes.new('GeometryNodeTriangulate')
+        triangulate_node.location = (-400,0)
+        triangulate_node.quad_method = 'FIXED'
+        triangulate_node.ngon_method = 'BEAUTY'
+
+        dual_mesh_node = node_group.nodes.new('GeometryNodeDualMesh')
+        dual_mesh_node.location = (-200,0)
+
+        mesh_to_curve_node = node_group.nodes.new('GeometryNodeMeshToCurve')
+        mesh_to_curve_node.location = (0,200)
+
+        curve_circle_node = node_group.nodes.new('GeometryNodeCurvePrimitiveCircle')
+        curve_circle_node.location = (0, 400)
+        curve_circle_node.inputs['Radius'].default_value = b/100
+        curve_circle_node.inputs['Resolution'].default_value = 8
+        curve_circle_node.mode = 'RADIUS'
+
+        curve_to_mesh_node = node_group.nodes.new('GeometryNodeCurveToMesh')
+        curve_to_mesh_node.location = (200,200)
+
+        set_material_1_node = node_group.nodes.new('GeometryNodeSetMaterial')
+        set_material_1_node.location = (400,200)
+
+        instances_on_points_node = node_group.nodes.new('GeometryNodeInstanceOnPoints')
+        instances_on_points_node.location = (0, -200)
+
+        uv_sphere_node = node_group.nodes.new('GeometryNodeMeshUVSphere')
+        uv_sphere_node.location = (0, -400)
+        uv_sphere_node.inputs['Segments'].default_value = 16
+        uv_sphere_node.inputs['Rings'].default_value = 8
+        uv_sphere_node.inputs['Radius'].default_value = a/100
+
+        set_material_2_node = node_group.nodes.new('GeometryNodeSetMaterial')
+        set_material_2_node.location = (200,-200)
+
+        join_geometry_node = node_group.nodes.new('GeometryNodeJoinGeometry')
+        join_geometry_node.location = (800,0)
+
+        wire_mat = create_bsdf_material(
+            'CNT_wire_Material',
+            material_tool.color,
+            material_tool.roughness,
+            material_tool.metallic
+        )
+        
+        sphere_mat = create_bsdf_material(
+            'CNT_Sphere_Material',
+            material_tool.color,
+            material_tool.roughness,
+            material_tool.metallic
+        )
+
+        # Set material inputs
+        set_material_1_node.inputs['Material'].default_value = wire_mat
+        set_material_2_node.inputs['Material'].default_value = sphere_mat
+
+
+
+
+        #node_group.input.new('NodeSocketMaterial', 'Material_1')
+        #node_group.input['Material_1'].default_value = material_1
+        
+        #node_group.input.new('NodeSocketMaterial', 'Material_2')
+        #node_group.input['Material_2'].default_value = material_2
+
+
+
+
+
+        links = node_group.links
+
+        links.new(group_input.outputs[0], triangulate_node.inputs[0])
+        links.new(triangulate_node.outputs['Mesh'], dual_mesh_node.inputs['Mesh'])
+
+        links.new(dual_mesh_node.outputs['Dual Mesh'], mesh_to_curve_node.inputs['Mesh'])
+        links.new(mesh_to_curve_node.outputs[0], curve_to_mesh_node.inputs[0])
+        links.new(curve_circle_node.outputs['Curve'], curve_to_mesh_node.inputs[1])
+        links.new(curve_to_mesh_node.outputs[0], set_material_1_node.inputs['Geometry'])
+        links.new(set_material_1_node.outputs['Geometry'], join_geometry_node.inputs['Geometry'])
+        
+       
+        #links.new(group_input.outputs['Material_1'], set_material_1_node.inputs['Material'])
+        
+    
+        links.new(dual_mesh_node.outputs['Dual Mesh'], instances_on_points_node.inputs['Points'])
+        links.new(uv_sphere_node.outputs['Mesh'], instances_on_points_node.inputs['Instance'])
+        links.new(instances_on_points_node.outputs['Instances'], set_material_2_node.inputs['Geometry'])
+        links.new(set_material_2_node.outputs['Geometry'], join_geometry_node.inputs[0])
+        
+   
+        #links.new(group_input.outputs['Material_2'], set_material_2_node.inputs['Material'])
+        
+
+        links.new(join_geometry_node.outputs[0], group_output.inputs[0])
+
+
+
+
+
+        return node_group
+
+
+    
+    def execute(self, context):
+        scene = context.scene
+        mytool = scene.my_tool
+        material_tool = scene.material_tool
+
+        global a, b
+        a = mytool.Carbon_sphere_gr
+        b = mytool.Carbon_wires_gr
+#Carbon_wires_gr: FloatProperty(
+#Carbon_num_gr: IntProperty(
+#Graphene_width: FloatProperty(
+#Carbon_sphere_gr: FloatProperty(
+
+        bpy.ops.mesh.primitive_plane_add(size = mytool.graphene_width,location= (0,0,0),rotation = (0,0,45*2*3.1415/360))
+        plane = bpy.context.view_layer.objects.active 
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+        plane.scale = (1.73205, 1, 1)
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+
+
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.subdivide(number_cuts = mytool.Carbon_num_gr -2)
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        
+        graphene = bpy.context.active_object
+        
+        geo_modifier = graphene.modifiers.new(name = "CNT_Geometry", type = 'NODES')
+        node_group = self.create_geometry_nodes_setup1(graphene,material_tool)
+        geo_modifier.node_group = node_group
+        
+        try:
+
+            bpy.ops.object.modifier_add_node_group(
+             asset_library_type='ESSENTIALS',
+            asset_library_identifier="",
+             relative_asset_identifier="geometry_nodes\\smooth_by_angle.blend\\NodeTree\\Smooth by Angle"
+            )
+    
+
+            smooth_modifier = graphene.modifiers.get("Smooth by Angle")
+    
+            if smooth_modifier:
+
+                smooth_modifier["Input_1"] = 1  
+
+                #smooth_modifier['Socket_1'] = 1
+                smooth_modifier['Socket_1'] = True  
+
+            else:
+                self.report({'WARNING'}, "Smooth by Angle modifier was not added successfully")
+        
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to add Smooth by Angle modifier: {str(e)}")
+
+        smooth_mod = graphene.modifiers.get("Smooth by Angle")
+        if smooth_mod:
+            # Принудительное обновление модификатора путем изменения его позиции
+            # 1. Перемещаем модификатор в самое начало стека
+            while graphene.modifiers.find(smooth_mod.name) > 0:
+                bpy.ops.object.modifier_move_to_index(modifier=smooth_mod.name, index=0)
+            # 2. Перемещаем модификатор в самый конец стека (после всех остальных модификаторов)
+            bpy.ops.object.modifier_move_to_index(modifier=smooth_mod.name, index=len(graphene.modifiers)-1)
+
+
+        self.refresh = True
+        
+        return {'FINISHED'}
+
 
 
 class VIEW3D_PT_my_panel(Panel):
@@ -486,12 +726,21 @@ class VIEW3D_PT_my_panel(Panel):
         box.prop(mytool, "Carbon_wires")
         layout.operator("object.create_cnt")
 
+        box = layout.box()
+        box.label(text="Graphene flake")
+        box.prop(mytool, "graphene_width")
+        box.prop(mytool, "Carbon_num_gr")
+        box.prop(mytool, "Carbon_sphere_gr")
+        box.prop(mytool, "Carbon_wires_gr")
+        layout.operator("object.create_graphene")
+
 
 classes = (
     MaterialProperties,
     MyProperties,
     OBJECT_OT_my_addon,
     OBJECT_OT_create_cnt,
+    OBJECT_OT_create_graphene,
     VIEW3D_PT_my_panel,
 )
 
