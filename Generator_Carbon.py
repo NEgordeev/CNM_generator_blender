@@ -5,8 +5,8 @@
 bl_info = {
     "name": "Nanomaterials generator",
     "author": "nikita.gordeev@skoltech.ru",
-    "version": (0, 2),
-    "blender": (2, 80, 0),
+    "version": (0, 3),
+    "blender": (5, 0, 0),
     "location": "View3D > UI > Nanomaterials generator",
     "description": "Create a set of Nanomaterials for further use in your papers",
     "category": "Object",
@@ -295,8 +295,9 @@ class OBJECT_OT_create_cnt(Operator):
 
         triangulate_node = node_group.nodes.new('GeometryNodeTriangulate')
         triangulate_node.location = (-400,0)
-        triangulate_node.quad_method = 'FIXED'
-        triangulate_node.ngon_method = 'BEAUTY'
+        triangulate_node.inputs['Quad Method'].default_value = 'Fixed'  # Changed
+        triangulate_node.inputs['N-gon Method'].default_value = 'Beauty'
+        
 
         dual_mesh_node = node_group.nodes.new('GeometryNodeDualMesh')
         dual_mesh_node.location = (-200,0)
@@ -444,39 +445,13 @@ class OBJECT_OT_create_cnt(Operator):
         node_group = self.create_geometry_nodes_setup(cnt_obj,material_tool)
         geo_modifier.node_group = node_group
         
-        try:
-
-            bpy.ops.object.modifier_add_node_group(
-             asset_library_type='ESSENTIALS',
-            asset_library_identifier="",
-             relative_asset_identifier="geometry_nodes\\smooth_by_angle.blend\\NodeTree\\Smooth by Angle"
-            )
-    
-
-            smooth_modifier = cnt_obj.modifiers.get("Smooth by Angle")
-    
-            if smooth_modifier:
-
-                smooth_modifier["Input_1"] = 1  
-
-                #smooth_modifier['Socket_1'] = 1
-                smooth_modifier['Socket_1'] = True  
-
-            else:
-                self.report({'WARNING'}, "Smooth by Angle modifier was not added successfully")
+        bpy.ops.object.shade_auto_smooth()
         
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to add Smooth by Angle modifier: {str(e)}")
-
-        smooth_mod = cnt_obj.modifiers.get("Smooth by Angle")
-        if smooth_mod:
-            # Принудительное обновление модификатора путем изменения его позиции
-            # 1. Перемещаем модификатор в самое начало стека
-            while cnt_obj.modifiers.find(smooth_mod.name) > 0:
-                bpy.ops.object.modifier_move_to_index(modifier=smooth_mod.name, index=0)
-            # 2. Перемещаем модификатор в самый конец стека (после всех остальных модификаторов)
-            bpy.ops.object.modifier_move_to_index(modifier=smooth_mod.name, index=len(cnt_obj.modifiers)-1)
-
+        bpy.context.object.modifiers["Smooth by Angle"]["Input_1"] = 0.937212
+        bpy.context.object.modifiers["Smooth by Angle"]["Input_1"] = 0.92
+        bpy.context.object.modifiers["Smooth by Angle"]["Socket_1"] = True
+        bpy.context.object.modifiers["Smooth by Angle"]["Input_1"] = 0.937212
+        bpy.context.object.modifiers["Smooth by Angle"]["Socket_1"] = True
 
         self.refresh = True
         
@@ -514,8 +489,8 @@ class OBJECT_OT_create_graphene(Operator):
 
         triangulate_node = node_group.nodes.new('GeometryNodeTriangulate')
         triangulate_node.location = (-400,0)
-        triangulate_node.quad_method = 'FIXED'
-        triangulate_node.ngon_method = 'BEAUTY'
+        triangulate_node.inputs['Quad Method'].default_value = 'Fixed'  # Changed
+        triangulate_node.inputs['N-gon Method'].default_value = 'Beauty'
 
         dual_mesh_node = node_group.nodes.new('GeometryNodeDualMesh')
         dual_mesh_node.location = (-200,0)
@@ -645,39 +620,13 @@ class OBJECT_OT_create_graphene(Operator):
         node_group = self.create_geometry_nodes_setup1(graphene,material_tool)
         geo_modifier.node_group = node_group
         
-        try:
-
-            bpy.ops.object.modifier_add_node_group(
-             asset_library_type='ESSENTIALS',
-            asset_library_identifier="",
-             relative_asset_identifier="geometry_nodes\\smooth_by_angle.blend\\NodeTree\\Smooth by Angle"
-            )
-    
-
-            smooth_modifier = graphene.modifiers.get("Smooth by Angle")
-    
-            if smooth_modifier:
-
-                smooth_modifier["Input_1"] = 1  
-
-                #smooth_modifier['Socket_1'] = 1
-                smooth_modifier['Socket_1'] = True  
-
-            else:
-                self.report({'WARNING'}, "Smooth by Angle modifier was not added successfully")
+        bpy.ops.object.shade_auto_smooth()
         
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to add Smooth by Angle modifier: {str(e)}")
-
-        smooth_mod = graphene.modifiers.get("Smooth by Angle")
-        if smooth_mod:
-            # Принудительное обновление модификатора путем изменения его позиции
-            # 1. Перемещаем модификатор в самое начало стека
-            while graphene.modifiers.find(smooth_mod.name) > 0:
-                bpy.ops.object.modifier_move_to_index(modifier=smooth_mod.name, index=0)
-            # 2. Перемещаем модификатор в самый конец стека (после всех остальных модификаторов)
-            bpy.ops.object.modifier_move_to_index(modifier=smooth_mod.name, index=len(graphene.modifiers)-1)
-
+        bpy.context.object.modifiers["Smooth by Angle"]["Input_1"] = 0.937212
+        bpy.context.object.modifiers["Smooth by Angle"]["Input_1"] = 0.92
+        bpy.context.object.modifiers["Smooth by Angle"]["Socket_1"] = True
+        bpy.context.object.modifiers["Smooth by Angle"]["Input_1"] = 0.937212
+        bpy.context.object.modifiers["Smooth by Angle"]["Socket_1"] = True
 
         self.refresh = True
         
